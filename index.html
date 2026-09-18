@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voting Nama Komunitas - Ghibli Pixel Edition</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Firebase App and Database SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    
+    <style>
+        .font-pixel { font-family: 'Press Start 2P', cursive; }
+        .font-pixel-sub { font-family: 'VT323', monospace; }
+        .font-body { font-family: 'Fredoka', sans-serif; }
+
+        .pixel-border {
+            box-shadow: 
+                -4px 0 0 0 #2d3748,
+                4px 0 0 0 #2d3748,
+                0 -4px 0 0 #2d3748,
+                0 4px 0 0 #2d3748;
+            margin: 4px;
+        }
+
+        .pixel-card {
+            border: 4px solid #2d3748;
+            box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 0.2);
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .pixel-card:hover {
+            transform: translateY(-6px) scale(1.02);
+            box-shadow: 10px 10px 0px 0px rgba(0, 0, 0, 0.25);
+        }
+
+        .pixel-btn {
+            border: 3px solid #1a202c;
+            box-shadow: 0px 4px 0px 0px #1a202c;
+            transition: all 0.1s ease;
+        }
+
+        .pixel-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0px 0px 0px 0px #1a202c;
+        }
+
+        .pixel-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: 0px 4px 0px 0px #1a202c !important;
+        }
+
+        @keyframes floatCloud {
+            0% { transform: translateX(-120%); }
+            100% { transform: translateX(120vw); }
+        }
+
+        .anim-cloud-slow { animation: floatCloud 45s linear infinite; }
+        .anim-cloud-fast { animation: floatCloud 28s linear infinite; }
+
+        @keyframes bobbing {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .anim-bob { animation: bobbing 3s ease-in-out infinite; }
+
+        .theme-day {
+            background: linear-gradient(180deg, #7ec0ee 0%, #b3e5fc 50%, #e8f5e9 85%, #81c784 100%);
+            color: #2d3748;
+        }
+
+        .theme-sunset {
+            background: linear-gradient(180deg, #ff7e5f 0%, #feb47b 45%, #ffe0b2 75%, #a5d6a7 100%);
+            color: #2d3748;
+        }
+
+        .theme-night {
+            background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 50%, #415a77 85%, #1e3a29 100%);
+            color: #f7fafc;
+        }
+
+        #particleCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 40;
+        }
+
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: #e2e8f0; }
+        ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
+    </style>
+</head>
+<body id="appBody" class="theme-day font-body min-h-screen transition-colors duration-700 relative overflow-x-hidden select-none">
+
+    <!-- Particle Overlay Canvas for Confetti -->
+    <canvas id="particleCanvas"></canvas>
+
+    <!-- Floating Background Clouds -->
+    <div class="fixed inset-0 pointer-events-none overflow-hidden z-0 opacity-80">
+        <div class="absolute top-10 left-0 anim-cloud-slow text-white text-6xl select-none">☁️</div>
+        <div class="absolute top-28 left-0 anim-cloud-fast text-white text-4xl select-none" style="animation-delay: -12s;">☁️</div>
+        <div class="absolute top-5 left-0 anim-cloud-slow text-white text-8xl select-none" style="animation-delay: -25s;">☁️</div>
+    </div>
+
+    <header class="relative z-10 max-w-6xl mx-auto pt-6 px-4">
+        <div class="bg-white/85 dark:bg-gray-900/85 backdrop-blur-md p-4 rounded-2xl pixel-border flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center space-x-3 cursor-pointer" id="adminTriggerLogo" title="Klik 3x untuk Akses Mode Admin">
+                <div class="text-3xl anim-bob">🌿</div>
+                <div>
+                    <h1 class="font-pixel text-base md:text-lg text-emerald-800 dark:text-emerald-300 tracking-tight">COMMUNITY VOTING</h1>
+                    <p class="font-pixel-sub text-lg text-emerald-600 dark:text-emerald-400">Pilih Nama Komunitas Favoritmu!</p>
+                </div>
+            </div>
+
+            <!-- Header Controls & Mode Status -->
+            <div class="flex items-center gap-2 flex-wrap">
+                <!-- Mode Badge Indicator -->
+                <div id="dbStatusBtn" class="pixel-btn bg-emerald-100 text-emerald-900 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5">
+                    <span id="dbStatusDot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span id="dbStatusText">Live Global Sync</span>
+                </div>
+
+                <!-- Theme Switcher -->
+                <button id="themeBtn" title="Ganti Suasana / Waktu" class="pixel-btn bg-amber-100 hover:bg-amber-200 text-amber-900 p-2.5 rounded-xl font-bold">
+                    <span id="themeIcon">☀️</span>
+                </button>
+
+                <!-- Sound Switcher -->
+                <button id="soundBtn" title="Suara FX On/Off" class="pixel-btn bg-sky-100 hover:bg-sky-200 text-sky-900 p-2.5 rounded-xl font-bold">
+                    <span id="soundIcon">🔊</span>
+                </button>
+
+                <!-- Hidden Admin Menu Toggle -->
+                <button id="adminPanelBtn" title="Menu Admin Rahasia" class="pixel-btn bg-rose-100 hover:bg-rose-200 text-rose-900 px-3 py-2.5 rounded-xl font-bold text-xs hidden">
+                    👑 Mode Admin
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="relative z-10 max-w-6xl mx-auto px-4 py-8">
+
+        <!-- Top Controls: Filter & Live Stats Banner -->
+        <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 bg-amber-50/90 dark:bg-gray-800/90 p-5 rounded-2xl pixel-border">
+            <div class="flex items-center gap-3">
+                <span class="font-pixel text-xs text-amber-900 dark:text-amber-200">URUTKAN:</span>
+                <select id="sortSelect" class="pixel-btn bg-white dark:bg-gray-700 text-gray-800 dark:text-white px-3 py-1.5 rounded-xl text-sm font-semibold focus:outline-none cursor-pointer">
+                    <option value="default">✨ Urutan Default</option>
+                    <option value="highest">🔥 Vote Terbanyak</option>
+                    <option value="lowest">🌱 Vote Tersedikit</option>
+                    <option value="name">🔤 Nama (A-Z)</option>
+                </select>
+            </div>
+
+            <div class="flex items-center gap-3 flex-wrap">
+                <div class="bg-emerald-100 dark:bg-emerald-900/60 px-4 py-2 rounded-xl border-2 border-emerald-500 text-emerald-800 dark:text-emerald-200 font-bold text-sm">
+                    Total Suara Komunitas: <span id="totalVotesCount" class="font-pixel text-emerald-600 dark:text-emerald-400">0</span>
+                </div>
+
+                <!-- ADMIN ONLY CONTROLS (Hidden by default for public safety) -->
+                <div id="adminControlsArea" class="hidden flex items-center gap-2">
+                    <button id="resetVotesBtn" class="pixel-btn bg-rose-200 hover:bg-rose-300 text-rose-900 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1">
+                        🗑️ Reset All
+                    </button>
+                    <button id="exportDataBtn" class="pixel-btn bg-indigo-100 hover:bg-indigo-200 text-indigo-800 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1">
+                        💾 JSON Data
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Voting Cards Grid (6 Community Names) -->
+        <div id="cardsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Dynamically Populated via JS -->
+        </div>
+
+        <section class="mt-12 bg-white/90 dark:bg-gray-800/90 rounded-2xl p-6 pixel-border">
+            <div class="flex items-center justify-between mb-6 flex-wrap gap-2">
+                <h2 class="font-pixel text-xs md:text-sm text-gray-800 dark:text-white flex items-center gap-2">
+                    📊 PEROLEHAN SUARA LIVE
+                </h2>
+                <button id="copySummaryBtn" class="pixel-btn bg-amber-200 hover:bg-amber-300 text-amber-900 px-3 py-1.5 rounded-xl text-xs font-bold">
+                    📋 Salin Hasil Vote
+                </button>
+            </div>
+
+            <!-- Custom Animated Progress Bars Container -->
+            <div id="statsBarsContainer" class="space-y-4">
+                <!-- Dynamically Populated via JS -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Item Detail Modal -->
+    <div id="detailModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-amber-50 dark:bg-gray-800 rounded-3xl max-w-lg w-full p-6 pixel-card relative transform transition-all scale-95 opacity-0 modal-content">
+            <button id="closeModalBtn" class="absolute top-4 right-4 bg-rose-200 text-rose-800 rounded-full w-8 h-8 flex items-center justify-center font-bold pixel-btn">✕</button>
+            
+            <div id="modalArtContainer" class="w-full h-48 bg-sky-200 dark:bg-slate-700 rounded-2xl flex items-center justify-center mb-4 border-2 border-slate-700 overflow-hidden relative">
+                <!-- SVG Art injected here -->
+            </div>
+
+            <div class="space-y-3">
+                <span id="modalCategory" class="inline-block px-3 py-1 bg-emerald-200 text-emerald-800 text-xs font-bold rounded-full font-pixel">Kategori</span>
+                <h3 id="modalTitle" class="font-pixel text-lg text-slate-800 dark:text-white">Judul Item</h3>
+                <p id="modalDesc" class="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">Deskripsi pilihan...</p>
+                
+                <div class="pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                    <div>
+                        <span class="text-xs text-slate-500 block">Jumlah Vote</span>
+                        <span id="modalVotesCount" class="font-pixel text-xl text-emerald-600 dark:text-emerald-400">0</span>
+                    </div>
+                    <button id="modalVoteBtn" class="pixel-btn bg-emerald-400 hover:bg-emerald-300 text-emerald-950 font-pixel text-xs px-6 py-3 rounded-xl">
+                        VOTE SEKARANG!
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Import/Export Modal (Admin Only) -->
+    <div id="dataModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-3xl max-w-lg w-full p-6 pixel-card relative">
+            <button id="closeDataModalBtn" class="absolute top-4 right-4 bg-rose-200 text-rose-800 rounded-full w-8 h-8 flex items-center justify-center font-bold pixel-btn">✕</button>
+            
+            <h3 class="font-pixel text-xs text-slate-800 dark:text-white mb-4">👑 Kelola Data JSON (Mode Admin)</h3>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1">Data JSON Hasil Vote saat ini:</label>
+                    <textarea id="jsonOutput" class="w-full h-32 p-3 font-mono text-xs bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none" readonly></textarea>
+                </div>
+
+                <div class="flex gap-2">
+                    <button id="copyJsonBtn" class="flex-1 pixel-btn bg-sky-200 hover:bg-sky-300 text-sky-900 py-2 rounded-xl text-xs font-bold">
+                        📋 Salin JSON
+                    </button>
+                    <button id="importJsonBtn" class="flex-1 pixel-btn bg-emerald-200 hover:bg-emerald-300 text-emerald-900 py-2 rounded-xl text-xs font-bold">
+                        📥 Impor Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Box -->
+    <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white font-pixel text-[10px] md:text-xs px-4 py-3 rounded-xl pixel-border z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none flex items-center gap-2">
+        <span id="toastIcon">✨</span>
+        <span id="toastMsg">Pesan Notifikasi</span>
+    </div>
+
+    <script>
+        /* ==========================================================================
+           1. HARDCODED FIREBASE CONFIG & 6 COMMUNITY ITEMS
+           ========================================================================== */
+        const FIREBASE_CONFIG = {
+            apiKey: "AIzaSyDWlt5iOePlf2iQf6ApPidIZVfukXkrZvw",
+            authDomain: "votingdb-a1865.firebaseapp.com",
+            databaseURL: "https://votingdb-a1865-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "votingdb-a1865",
+            storageBucket: "votingdb-a1865.firebasestorage.app",
+            messagingSenderId: "296765167848",
+            appId: "1:296765167848:web:e397ed3d298e6d387c515d"
+        };
+
+        const INITIAL_ITEMS = [
+            {
+                id: 'item-1',
+                title: 'Polixels',
+                category: 'Game Tech Community',
+                desc: 'Polibatam Pixel Voxel.',
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full">
+                    <rect x="0" y="0" width="100" height="100" fill="#a0e0ff"/>
+                    <rect x="20" y="20" width="20" height="20" fill="#2d3748"/>
+                    <rect x="40" y="20" width="20" height="20" fill="#4a5568"/>
+                    <rect x="60" y="20" width="20" height="20" fill="#2d3748"/>
+                    <rect x="20" y="40" width="60" height="40" fill="#10b981"/>
+                    <rect x="30" y="50" width="10" height="10" fill="#ffffff"/>
+                    <rect x="60" y="50" width="10" height="10" fill="#ffffff"/>
+                    <rect x="40" y="65" width="20" height="5" fill="#047857"/>
+                </svg>`,
+                votes: 0
+            },
+            {
+                id: 'item-2',
+                title: 'A3GIM',
+                category: 'Game Tech Community',
+                desc: 'Angkatan 3 Game tech - Nama khas angkatan ketiga Game Technology.',
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full">
+                    <rect x="0" y="0" width="100" height="100" fill="#ffedd5"/>
+                    <path d="M20,30 L80,30 L85,70 L75,80 L60,65 L40,65 L25,80 L15,70 Z" fill="#ea580c"/>
+                    <rect x="30" y="45" width="5" height="15" fill="#ffffff"/>
+                    <rect x="25" y="50" width="15" height="5" fill="#ffffff"/>
+                    <circle cx="65" cy="48" r="4" fill="#fbbf24"/>
+                    <circle cx="73" cy="55" r="4" fill="#ef4444"/>
+                </svg>`,
+                votes: 0
+            },
+            {
+                id: 'item-3',
+                title: 'A3GIS',
+                category: 'Game Tech Community',
+                desc: 'A3 Game Industry studio',
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full">
+                    <rect x="0" y="0" width="100" height="100" fill="#e0f2fe"/>
+                    <rect x="25" y="30" width="50" height="50" fill="#0284c7"/>
+                    <polygon points="50,10 15,35 85,35" fill="#38bdf8"/>
+                    <rect x="42" y="50" width="16" height="30" fill="#0369a1"/>
+                    <rect x="33" y="40" width="10" height="10" fill="#bae6fd"/>
+                    <rect x="57" y="40" width="10" height="10" fill="#bae6fd"/>
+                </svg>`,
+                votes: 0
+            },
+            {
+                id: 'item-4',
+                title: 'Hellna',
+                category: 'Game Tech Community',
+                desc: 'hellna momen ketika dapat tugas',
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full">
+                    <rect x="0" y="0" width="100" height="100" fill="#fce7f3"/>
+                    <path d="M30,20 Q50,5 70,20 Q85,50 70,80 Q50,95 30,80 Q15,50 30,20 Z" fill="#ec4899"/>
+                    <circle cx="40" cy="45" r="5" fill="#ffffff"/>
+                    <circle cx="60" cy="45" r="5" fill="#ffffff"/>
+                    <path d="M40,65 Q50,75 60,65" stroke="#ffffff" stroke-width="4" fill="none"/>
+                </svg>`,
+                votes: 0
+            },
+            {
+                id: 'item-5',
+                title: 'Low Point',
+                category: 'Game Tech Community',
+                desc: 'kalcer??.',
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full">
+                    <rect x="0" y="0" width="100" height="100" fill="#f3e8ff"/>
+                    <polygon points="50,20 80,75 20,75" fill="#9333ea"/>
+                    <polygon points="50,35 70,75 30,75" fill="#c084fc"/>
+                    <circle cx="50" cy="20" r="4" fill="#facc15"/>
+                </svg>`,
+                votes: 0
+            },
+            {
+                id: 'item-6',
+                title: 'ALLMine',
+                category: 'Game Tech Community',
+                desc: 'smwa milik gweh.',
+                svg: `<svg viewBox="0 0 100 100" class="w-full h-full">
+                    <rect x="0" y="0" width="100" height="100" fill="#fef08a"/>
+                    <rect x="25" y="35" width="50" height="40" rx="5" fill="#ca8a04"/>
+                    <path d="M30,35 A20,20 0 0,1 70,35" stroke="#854d0e" stroke-width="6" fill="none"/>
+                    <circle cx="50" cy="55" r="6" fill="#fef08a"/>
+                </svg>`,
+                votes: 0
+            }
+        ];
+
+        const VOTE_HAS_VOTED_KEY = 'community_vote_user_voted_id';
+
+        let itemsData = [];
+        let firebaseDbRef = null;
+        let soundEnabled = true;
+        let activeTheme = 'day';
+        let isAdmin = false;
+        let logoClickCount = 0;
+
+        /* ==========================================================================
+           2. AUDIO SYNTHESIZER (8-BIT SOUND FX)
+           ========================================================================== */
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playPixelSound(type) {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'vote') {
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(523.25, now);
+                    osc.frequency.setValueAtTime(659.25, now + 0.08);
+                    osc.frequency.setValueAtTime(783.99, now + 0.16);
+                    osc.frequency.setValueAtTime(1046.50, now + 0.24);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                } else if (type === 'click') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.exponentialRampToValueAtTime(880, now + 0.08);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } else if (type === 'reset') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.exponentialRampToValueAtTime(120, now + 0.25);
+                    gain.gain.setValueAtTime(0.12, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                }
+            } catch (e) {
+                console.log('Audio Error:', e);
+            }
+        }
+
+        /* ==========================================================================
+           3. FIREBASE AUTOMATIC REALTIME SYNC
+           ========================================================================== */
+        function initFirebaseAuto() {
+            try {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(FIREBASE_CONFIG);
+                }
+                const db = firebase.database();
+                firebaseDbRef = db.ref('community_votes');
+
+                // Realtime Sync Listener
+                firebaseDbRef.on('value', (snapshot) => {
+                    const val = snapshot.val();
+                    if (val) {
+                        if (Array.isArray(val)) {
+                            itemsData = val;
+                        } else {
+                            itemsData = INITIAL_ITEMS.map(item => ({
+                                ...item,
+                                votes: val[item.id] !== undefined ? val[item.id] : 0
+                            }));
+                        }
+                    } else {
+                        // Initialize database if empty
+                        syncVotesToFirebase();
+                    }
+                    renderAll();
+                });
+
+            } catch (err) {
+                console.error('Firebase Error:', err);
+                itemsData = [...INITIAL_ITEMS];
+                renderAll();
+            }
+        }
+
+        function syncVotesToFirebase() {
+            if (firebaseDbRef) {
+                firebaseDbRef.set(itemsData);
+            }
+        }
+
+        /* ==========================================================================
+           4. UI RENDERING & VOTING RESTRICTIONS
+           ========================================================================== */
+        function getTotalVotes() {
+            return itemsData.reduce((acc, curr) => acc + curr.votes, 0);
+        }
+
+        function getUserVotedItemId() {
+            return localStorage.getItem(VOTE_HAS_VOTED_KEY);
+        }
+
+        function renderAll() {
+            renderCards();
+            renderStats();
+            document.getElementById('totalVotesCount').textContent = getTotalVotes();
+        }
+
+        function getSortedItems() {
+            const sortVal = document.getElementById('sortSelect').value;
+            const itemsCopy = [...itemsData];
+
+            if (sortVal === 'highest') {
+                return itemsCopy.sort((a, b) => b.votes - a.votes);
+            } else if (sortVal === 'lowest') {
+                return itemsCopy.sort((a, b) => a.votes - b.votes);
+            } else if (sortVal === 'name') {
+                return itemsCopy.sort((a, b) => a.title.localeCompare(b.title));
+            }
+            return itemsCopy;
+        }
+
+        function renderCards() {
+            const container = document.getElementById('cardsGrid');
+            container.innerHTML = '';
+
+            const sorted = getSortedItems();
+            const total = getTotalVotes();
+            const userVotedId = getUserVotedItemId();
+
+            sorted.forEach((item) => {
+                const percentage = total > 0 ? ((item.votes / total) * 100).toFixed(1) : '0.0';
+                const isThisVoted = userVotedId === item.id;
+                const hasVotedAny = userVotedId !== null;
+
+                const cardEl = document.createElement('div');
+                cardEl.className = `pixel-card bg-white/90 dark:bg-gray-800/90 rounded-2xl p-5 flex flex-col justify-between cursor-pointer group relative overflow-hidden ${isThisVoted ? 'ring-4 ring-emerald-500' : ''}`;
+                
+                cardEl.innerHTML = `
+                    <div onclick="openDetailModal('${item.id}')">
+                        <div class="w-full h-40 bg-sky-100 dark:bg-slate-700 rounded-xl overflow-hidden mb-4 border-2 border-slate-700 relative flex items-center justify-center p-2 group-hover:scale-105 transition-transform duration-300">
+                            ${item.svg}
+                            <span class="absolute top-2 left-2 bg-emerald-300 text-emerald-950 font-pixel text-[9px] px-2 py-1 rounded-md border border-slate-800">
+                                ${item.category}
+                            </span>
+                            ${isThisVoted ? '<span class="absolute top-2 right-2 bg-amber-400 text-slate-900 font-bold text-[10px] px-2 py-0.5 rounded-full border border-slate-800">Pilihanmu ✓</span>' : ''}
+                        </div>
+
+                        <h3 class="font-pixel text-xs md:text-sm text-slate-800 dark:text-white mb-2 group-hover:text-emerald-600 transition-colors">
+                            ${item.title}
+                        </h3>
+                        <p class="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 mb-4">
+                            ${item.desc}
+                        </p>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-200 dark:border-slate-700">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-pixel text-xs text-emerald-600 dark:text-emerald-400">
+                                🗳️ ${item.votes} Vote
+                            </span>
+                            <span class="font-pixel-sub text-sm font-bold text-slate-500">
+                                ${percentage}%
+                            </span>
+                        </div>
+
+                        <div class="w-full h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden border border-slate-400 mb-3">
+                            <div class="h-full bg-gradient-to-r from-emerald-400 to-teal-500 transition-all duration-500" style="width: ${percentage}%"></div>
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button onclick="voteItem('${item.id}', event)" ${hasVotedAny ? 'disabled' : ''} 
+                                class="pixel-btn flex-1 ${isThisVoted ? 'bg-emerald-500 text-white' : 'bg-emerald-400 hover:bg-emerald-300'} text-emerald-950 font-pixel text-[10px] py-2.5 rounded-xl flex items-center justify-center gap-1">
+                                ${isThisVoted ? '✓ SUDAH DIVOTE' : (hasVotedAny ? '🔒 SUDAH VOTE' : '➕ VOTE')}
+                            </button>
+                            <button onclick="openDetailModal('${item.id}')" title="Lihat Info" class="pixel-btn bg-amber-100 hover:bg-amber-200 text-amber-900 px-3 py-2.5 rounded-xl font-bold text-xs">
+                                📖
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(cardEl);
+            });
+        }
+
+        function renderStats() {
+            const container = document.getElementById('statsBarsContainer');
+            container.innerHTML = '';
+
+            const total = getTotalVotes();
+            const sortedByVotes = [...itemsData].sort((a, b) => b.votes - a.votes);
+
+            sortedByVotes.forEach((item, index) => {
+                const percentage = total > 0 ? ((item.votes / total) * 100).toFixed(1) : '0.0';
+                
+                let rankBadge = `<span>#${index + 1}</span>`;
+                if (index === 0 && total > 0) rankBadge = `<span>🥇 #1</span>`;
+                else if (index === 1 && total > 0) rankBadge = `<span>🥈 #2</span>`;
+                else if (index === 2 && total > 0) rankBadge = `<span>🥉 #3</span>`;
+
+                const barEl = document.createElement('div');
+                barEl.className = 'space-y-1';
+                barEl.innerHTML = `
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-pixel text-slate-800 dark:text-white flex items-center gap-2 text-[10px] md:text-xs">
+                            ${rankBadge} ${item.title}
+                        </span>
+                        <span class="font-pixel-sub text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                            ${item.votes} Suara (${percentage}%)
+                        </span>
+                    </div>
+                    <div class="w-full h-4 bg-slate-100 dark:bg-slate-700 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600">
+                        <div class="h-full bg-gradient-to-r from-amber-400 via-emerald-400 to-sky-400 transition-all duration-700 rounded-lg" style="width: ${percentage}%"></div>
+                    </div>
+                `;
+                container.appendChild(barEl);
+            });
+        }
+
+        /* ==========================================================================
+           5. VOTING & PARTICLE CONFETTI
+           ========================================================================== */
+        function voteItem(id, event) {
+            if (event) event.stopPropagation();
+
+            const userVotedId = getUserVotedItemId();
+            if (userVotedId) {
+                showToast('Kamu sudah pernah memberikan vote!', '⚠️');
+                return;
+            }
+
+            const item = itemsData.find(i => i.id === id);
+            if (!item) return;
+
+            item.votes += 1;
+            localStorage.setItem(VOTE_HAS_VOTED_KEY, id);
+            syncVotesToFirebase();
+            renderAll();
+
+            playPixelSound('vote');
+
+            const x = event ? event.clientX : window.innerWidth / 2;
+            const y = event ? event.clientY : window.innerHeight / 2;
+            spawnConfetti(x, y);
+
+            showToast(`Vote berhasil untuk "${item.title}"! 🎉`, '✨');
+        }
+
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function spawnConfetti(originX, originY) {
+            const colors = ['#55aa44', '#7ec0ee', '#ff7e5f', '#ffcc00', '#ff6699', '#ffffff'];
+            for (let i = 0; i < 35; i++) {
+                particles.push({
+                    x: originX,
+                    y: originY,
+                    size: Math.floor(Math.random() * 6) + 4,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    vx: (Math.random() - 0.5) * 12,
+                    vy: (Math.random() - 0.7) * 14,
+                    gravity: 0.35,
+                    life: 1.0,
+                    decay: Math.random() * 0.02 + 0.015
+                });
+            }
+        }
+
+        function updateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += p.gravity;
+                p.life -= p.decay;
+
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
+            }
+
+            requestAnimationFrame(updateParticles);
+        }
+        updateParticles();
+
+        /* ==========================================================================
+           6. SECRET ADMIN TRIGGER & CONTROLLERS
+           ========================================================================== */
+        // Secret Trigger: Click logo 3 times to unlock Admin mode
+        document.getElementById('adminTriggerLogo').addEventListener('click', () => {
+            logoClickCount++;
+            if (logoClickCount === 3) {
+                const pass = prompt('Masukkan Password Admin untuk Akses Reset:');
+                if (pass === 'admin123' || pass === 'admin') {
+                    isAdmin = true;
+                    document.getElementById('adminControlsArea').classList.remove('hidden');
+                    document.getElementById('adminPanelBtn').classList.remove('hidden');
+                    showToast('Mode Admin Dikerahkan! 👑', '🔓');
+                    playPixelSound('vote');
+                } else {
+                    alert('Password Salah!');
+                }
+                logoClickCount = 0;
+            }
+        });
+
+        let currentModalItemId = null;
+
+        function openDetailModal(id) {
+            playPixelSound('click');
+            const item = itemsData.find(i => i.id === id);
+            if (!item) return;
+
+            currentModalItemId = id;
+            document.getElementById('modalArtContainer').innerHTML = item.svg;
+            document.getElementById('modalCategory').textContent = item.category;
+            document.getElementById('modalTitle').textContent = item.title;
+            document.getElementById('modalDesc').textContent = item.desc;
+            document.getElementById('modalVotesCount').textContent = item.votes;
+
+            const userVotedId = getUserVotedItemId();
+            const modalBtn = document.getElementById('modalVoteBtn');
+            if (userVotedId) {
+                modalBtn.disabled = true;
+                modalBtn.textContent = 'SUDAH VOTE';
+            } else {
+                modalBtn.disabled = false;
+                modalBtn.textContent = 'VOTE SEKARANG!';
+            }
+
+            const modal = document.getElementById('detailModal');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.querySelector('.modal-content').classList.remove('scale-95', 'opacity-0');
+            }, 10);
+        }
+
+        function closeModal() {
+            playPixelSound('click');
+            const modal = document.getElementById('detailModal');
+            modal.querySelector('.modal-content').classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 200);
+        }
+
+        document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+        document.getElementById('modalVoteBtn').addEventListener('click', () => {
+            if (currentModalItemId) {
+                voteItem(currentModalItemId);
+                document.getElementById('modalVotesCount').textContent = itemsData.find(i => i.id === currentModalItemId).votes;
+                closeModal();
+            }
+        });
+
+        // Data JSON Modal
+        const dataModal = document.getElementById('dataModal');
+        document.getElementById('exportDataBtn').addEventListener('click', () => {
+            playPixelSound('click');
+            document.getElementById('jsonOutput').value = JSON.stringify(itemsData, null, 2);
+            dataModal.classList.remove('hidden');
+        });
+        document.getElementById('closeDataModalBtn').addEventListener('click', () => {
+            playPixelSound('click');
+            dataModal.classList.add('hidden');
+        });
+
+        document.getElementById('copyJsonBtn').addEventListener('click', () => {
+            playPixelSound('click');
+            const textarea = document.getElementById('jsonOutput');
+            textarea.select();
+            document.execCommand('copy');
+            showToast('JSON disalin ke clipboard!', '📋');
+        });
+
+        document.getElementById('importJsonBtn').addEventListener('click', () => {
+            playPixelSound('click');
+            if (!isAdmin) return;
+            const raw = prompt('Tempelkan Data JSON baru di sini:');
+            if (raw) {
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        itemsData = parsed;
+                        syncVotesToFirebase();
+                        renderAll();
+                        dataModal.classList.add('hidden');
+                        showToast('Data berhasil diimpor!', '📥');
+                    } else {
+                        alert('Format JSON tidak valid!');
+                    }
+                } catch (err) {
+                    alert('Error memuat JSON: ' + err.message);
+                }
+            }
+        });
+
+        // Reset Votes (Admin Only)
+        document.getElementById('resetVotesBtn').addEventListener('click', () => {
+            playPixelSound('reset');
+            if (!isAdmin) return;
+            if (confirm('PERINGATAN ADMIN: Apakah Anda yakin ingin mereset SELURUH VOTE kembali ke 0?')) {
+                itemsData = INITIAL_ITEMS.map(i => ({...i, votes: 0}));
+                localStorage.removeItem(VOTE_HAS_VOTED_KEY);
+                syncVotesToFirebase();
+                renderAll();
+                showToast('Seluruh hasil voting telah di-reset ke 0!', '🗑️');
+            }
+        });
+
+        // Copy Summary Text
+        document.getElementById('copySummaryBtn').addEventListener('click', () => {
+            playPixelSound('click');
+            const total = getTotalVotes();
+            let summaryText = `🌿 HASIL VOTING NAMA KOMUNITAS 🌿\nTotal Suara: ${total}\n-----------------------------------\n`;
+            
+            [...itemsData].sort((a,b) => b.votes - a.votes).forEach((item, idx) => {
+                const pct = total > 0 ? ((item.votes/total)*100).toFixed(1) : '0';
+                summaryText += `${idx + 1}. ${item.title}: ${item.votes} vote (${pct}%)\n`;
+            });
+
+            summaryText += `\nVote live via GitHub Pages! ✨`;
+
+            const dummy = document.createElement('textarea');
+            document.body.appendChild(dummy);
+            dummy.value = summaryText;
+            dummy.select();
+            document.execCommand('copy');
+            document.body.removeChild(dummy);
+
+            showToast('Ringkasan teks disalin!', '📋');
+        });
+
+        // Theme Switcher
+        const themeBtn = document.getElementById('themeBtn');
+        const themeIcon = document.getElementById('themeIcon');
+        const body = document.getElementById('appBody');
+
+        themeBtn.addEventListener('click', () => {
+            playPixelSound('click');
+            if (activeTheme === 'day') {
+                activeTheme = 'sunset';
+                body.className = 'theme-sunset font-body min-h-screen transition-colors duration-700 relative overflow-x-hidden select-none';
+                themeIcon.textContent = '🌅';
+                showToast('Suasana diganti ke Senja Ghibli', '🌅');
+            } else if (activeTheme === 'sunset') {
+                activeTheme = 'night';
+                body.className = 'theme-night font-body min-h-screen transition-colors duration-700 relative overflow-x-hidden select-none';
+                themeIcon.textContent = '🌙';
+                showToast('Suasana diganti ke Malam Bintang', '🌙');
+            } else {
+                activeTheme = 'day';
+                body.className = 'theme-day font-body min-h-screen transition-colors duration-700 relative overflow-x-hidden select-none';
+                themeIcon.textContent = '☀️';
+                showToast('Suasana diganti ke Siang Hari', '☀️');
+            }
+        });
+
+        // Sound Toggle
+        const soundBtn = document.getElementById('soundBtn');
+        const soundIcon = document.getElementById('soundIcon');
+
+        soundBtn.addEventListener('click', () => {
+            soundEnabled = !soundEnabled;
+            soundIcon.textContent = soundEnabled ? '🔊' : '🔇';
+            if (soundEnabled) playPixelSound('click');
+            showToast(`Suara FX: ${soundEnabled ? 'Aktif' : 'Mati'}`, soundEnabled ? '🔊' : '🔇');
+        });
+
+        // Toast Helper
+        let toastTimeout = null;
+        function showToast(msg, icon = '✨') {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').textContent = msg;
+            document.getElementById('toastIcon').textContent = icon;
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+                toast.classList.remove('translate-y-0', 'opacity-100');
+            }, 2600);
+        }
+
+        document.getElementById('sortSelect').addEventListener('change', () => {
+            playPixelSound('click');
+            renderCards();
+        });
+
+        /* ==========================================================================
+           7. INITIALIZATION
+           ========================================================================== */
+        window.addEventListener('DOMContentLoaded', () => {
+            initFirebaseAuto();
+        });
+    </script>
+</body>
+</html>
